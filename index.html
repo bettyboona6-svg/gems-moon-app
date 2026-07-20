@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Horizon Sky Tracker</title>
+  <style>
+    :root {
+      --bg-top: #03071e;
+      --bg-bottom: #0f172a;
+      --horizon: #38bdf8;
+      --ground: #020617;
+      --panel: rgba(15, 23, 42, 0.9);
+      --accent: #3b82f6;
+      --text: #f8fafc;
+    }
+
+    /* Palette Themes */
+    body.palette-night {
+      --bg-top: #020208;
+      --bg-bottom: #0d1b2a;
+      --horizon: #38bdf8;
+      --ground: #030712;
+    }
+
+    body.palette-twilight {
+      --bg-top: #1e1b4b;
+      --bg-bottom: #4c1d95;
+      --horizon: #f43f5e;
+      --ground: #0f172a;
+    }
+
+    body.palette-dark {
+      --bg-top: #000000;
+      --bg-bottom: #09090b;
+      --horizon: #71717a;
+      --ground: #000000;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--ground);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Options Bar */
+    .top-bar {
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      padding: 8px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 100;
+    }
+
+    .group { display: flex; align-items: center; gap: 6px; }
+    label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #94a3b8; }
+
+    select, input[type="date"], input[type="time"] {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 3px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      outline: none;
+    }
+
+    select option { background: #0f172a; color: #fff; }
+
+    /* Canvas Viewport */
+    .viewport {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Top Screen Direction Labels */
+    .top-cardinals-bar {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 16px;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 3px 12px;
+      border-radius: 16px;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    .cardinal-item {
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+
+    .cardinal-item span {
+      color: #38bdf8;
+      font-weight: 800;
+    }
+
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* Compact Bottom Playback Controls */
+    .playback-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 45%;
+      transform: translateX(-50%);
+      width: 75%;
+      max-width: 640px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 6px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      z-index: 100;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .timeline-scrubber {
+      width: 100%;
+      height: 4px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      transition: background 0.2s;
+    }
+
+    .btn:hover { background: rgba(255, 255, 255, 0.25); }
+
+    .btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .live-badge {
+      background: #ef4444;
+      border: none;
+      font-weight: bold;
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 9px;
+    }
+
+    .time-display {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: bold;
+      color: #38bdf8;
+    }
+
+    /* Bottom-Right Hand Corner Branding Badge */
+    .bottom-right-badge {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      padding: 6px 10px;
+      z-index: 120;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+
+    .bottom-right-badge img {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+      /* Sharpen and clarify visual filter */
+      filter: contrast(1.15) brightness(1.05) drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      border: 1.5px solid rgba(56, 189, 248, 0.6);
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+
+    .bottom-right-badge span {
+      font-size: 10px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.5px;
+      text-transform: lowercase;
+    }
+  </style>
+</head>
+<body class="palette-night">
+
+  <div class="top-bar">
+    <div class="group">
+      <label>Horizon View:</label>
+      <select id="viewSelect">
+        <option value="180">South (S)</option>
+        <option value="0">North (N)</option>
+        <option value="90">East (E)</option>
+        <option value="270">West (W)</option>
+        <option value="all">Full 360° Panorama</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label>Palette:</label>
+      <select id="paletteSelect">
+        <option value="palette-night">Night Navy</option>
+        <option value="palette-twilight">Twilight Purple</option>
+        <option value="palette-dark">Deep Black</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label>Show Sun:</label>
+      <input type="checkbox" id="toggleSun" checked>
+    </div>
+
+    <div class="group">
+      <label>Show Planets:</label>
+      <input type="checkbox" id="togglePlanets" checked>
+    </div>
+
+    <div class="group">
+      <label>Speed:</label>
+      <select id="speedSelect">
+        <option value="1">1x (Real Time)</option>
+        <option value="60">60x (1 min / sec)</option>
+        <option value="3600">3600x (1 hr / sec)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="viewport">
+
+    <div class="top-cardinals-bar">
+      <div class="cardinal-item"><span>N</span> north</div>
+      <div class="cardinal-item"><span>S</span> south</div>
+      <div class="cardinal-item"><span>W</span> west</div>
+      <div class="cardinal-item"><span>E</span> east</div>
+    </div>
+
+    <canvas id="skyCanvas"></canvas>
+
+    <div class="playback-bar">
+      <input type="range" id="timeline" class="timeline-scrubber" min="0" max="86400" value="0">
+      
+      <div class="controls-row">
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button class="btn live-badge" id="btnLive">● LIVE</button>
+          <button class="btn active" id="btnPlay">► Play</button>
+          <button class="btn" id="btnPause">❚❚ Pause</button>
+          <button class="btn" id="btnRewind">◄◄ 1h</button>
+          <button class="btn" id="btnForward">►► 1h</button>
+        </div>
+
+        <div class="time-display" id="timeDisplay">MON 2026-07-20 00:00:00</div>
+
+        <div style="display: flex; gap: 4px;">
+          <input type="date" id="datePicker">
+          <input type="time" id="timePicker" step="1">
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-right-badge">
+      <img src="gem.png" alt="Gem Avatar" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\'><circle cx=\'20\' cy=\'20\' r=\'18\' fill=\'%2338bdf8\'/></svg>'">
+      <span>gems moon app</span>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('skyCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Controls Handles
+    const viewSelect = document.getElementById('viewSelect');
+    const paletteSelect = document.getElementById('paletteSelect');
+    const toggleSun = document.getElementById('toggleSun');
+    const togglePlanets = document.getElementById('togglePlanets');
+    const speedSelect = document.getElementById('speedSelect');
+    const timeline = document.getElementById('timeline');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const datePicker = document.getElementById('datePicker');
+    const timePicker = document.getElementById('timePicker');
+    const btnLive = document.getElementById('btnLive');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnPause = document.getElementById('btnPause');
+    const btnRewind = document.getElementById('btnRewind');
+    const btnForward = document.getElementById('btnForward');
+
+    // App State
+    let currentTime = new Date();
+    let isLive = true;
+    let isPlaying = true;
+    let timeMultiplier = 1;
+
+    const daysOfWeek = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    paletteSelect.addEventListener('change', (e) => {
+      document.body.className = e.target.value;
+    });
+
+    btnPlay.addEventListener('click', () => {
+      isPlaying = true;
+      btnPlay.classList.add('active');
+      btnPause.classList.remove('active');
+    });
+
+    btnPause.addEventListener('click', () => {
+      isPlaying = false;
+      btnPause.classList.add('active');
+      btnPlay.classList.remove('active');
+    });
+
+    btnLive.addEventListener('click', () => {
+      isLive = true;
+      isPlaying = true;
+      timeMultiplier = 1;
+      speedSelect.value = "1";
+      btnPlay.classList.add('active');
+      btnPause.classList.remove('active');
+    });
+
+    speedSelect.addEventListener('change', (e) => {
+      timeMultiplier = parseFloat(e.target.value);
+    });
+
+    timeline.addEventListener('input', (e) => {
+      isLive = false;
+      const totalSec = parseInt(e.target.value);
+      currentTime.setHours(Math.floor(totalSec / 3600));
+      currentTime.setMinutes(Math.floor((totalSec % 3600) / 60));
+      currentTime.setSeconds(totalSec % 60);
+      syncUI();
+    });
+
+    datePicker.addEventListener('change', () => {
+      isLive = false;
+      const [y, m, d] = datePicker.value.split('-').map(Number);
+      currentTime.setFullYear(y, m - 1, d);
+      syncUI();
+    });
+
+    timePicker.addEventListener('change', () => {
+      isLive = false;
+      const [h, min, s] = timePicker.value.split(':').map(Number);
+      currentTime.setHours(h, min, s || 0);
+      syncUI();
+    });
+
+    btnRewind.addEventListener('click', () => {
+      isLive = false;
+      currentTime = new Date(currentTime.getTime() - 3600000);
+      syncUI();
+    });
+
+    btnForward.addEventListener('click', () => {
+      isLive = false;
+      currentTime = new Date(currentTime.getTime() + 3600000);
+      syncUI();
+    });
+
+    function syncUI() {
+      const dayName = daysOfWeek[currentTime.getDay()];
+      const year = currentTime.getFullYear();
+      const month = String(currentTime.getMonth() + 1).padStart(2, '0');
+      const day = String(currentTime.getDate()).padStart(2, '0');
+      const hours = String(currentTime.getHours()).padStart(2, '0');
+      const mins = String(currentTime.getMinutes()).padStart(2, '0');
+      const secs = String(currentTime.getSeconds()).padStart(2, '0');
+
+      datePicker.value = `${year}-${month}-${day}`;
+      timePicker.value = `${hours}:${mins}:${secs}`;
+      
+      const secondsInDay = (currentTime.getHours() * 3600) + (currentTime.getMinutes() * 60) + currentTime.getSeconds();
+      timeline.value = secondsInDay;
+
+      timeDisplay.innerText = `${dayName} ${year}-${month}-${day} ${hours}:${mins}:${secs}`;
+      btnLive.style.opacity = isLive ? "1" : "0.4";
+    }
+
+    function getCelestialPositions(date) {
+      const sec = (date.getHours() * 3600) + (date.getMinutes() * 60) + date.getSeconds();
+      const dayFraction = sec / 86400;
+
+      const sunAzimuth = (90 + (dayFraction * 360)) % 360;
+      const sunAltitude = Math.sin((dayFraction - 0.25) * Math.PI * 2) * 60;
+
+      const moonFraction = (dayFraction + 0.45) % 1.0;
+      const moonAzimuth = (90 + (moonFraction * 360)) % 360;
+      const moonAltitude = Math.sin((moonFraction - 0.25) * Math.PI * 2) * 55;
+
+      const planetList = [
+        { name: 'VENUS', offset: 0.1, maxAlt: 45, color: '#fef08a' },
+        { name: 'MARS', offset: 0.3, maxAlt: 50, color: '#f87171' },
+        { name: 'JUPITER', offset: 0.6, maxAlt: 58, color: '#fed7aa' },
+        { name: 'SATURN', offset: 0.8, maxAlt: 40, color: '#fef08a' }
+      ].map(p => {
+        const frac = (dayFraction + p.offset) % 1.0;
+        return {
+          name: p.name,
+          color: p.color,
+          azimuth: (90 + (frac * 360)) % 360,
+          altitude: Math.sin((frac - 0.25) * Math.PI * 2) * p.maxAlt
+        };
+      });
+
+      return { sunAzimuth, sunAltitude, moonAzimuth, moonAltitude, planetList };
+    }
+
+    function drawScenery(w, horizonY) {
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--ground').trim();
+
+      const skyScrapers = [
+        { x: w * 0.38, bw: 18, bh: 65 },
+        { x: w * 0.40, bw: 24, bh: 95 },
+        { x: w * 0.43, bw: 16, bh: 50 },
+        { x: w * 0.45, bw: 30, bh: 110 },
+        { x: w * 0.49, bw: 22, bh: 75 },
+        { x: w * 0.52, bw: 28, bh: 100 },
+        { x: w * 0.56, bw: 15, bh: 60 }
+      ];
+      skyScrapers.forEach(s => ctx.fillRect(s.x, horizonY - s.bh, s.bw, s.bh));
+
+      const houses = [
+        { x: w * 0.15, w: 22, h: 18 },
+        { x: w * 0.22, w: 26, h: 20 },
+        { x: w * 0.70, w: 25, h: 20 },
+        { x: w * 0.82, w: 22, h: 16 }
+      ];
+      houses.forEach(h => {
+        ctx.fillRect(h.x, horizonY - h.h, h.w, h.h);
+        ctx.beginPath();
+        ctx.moveTo(h.x - 2, horizonY - h.h);
+        ctx.lineTo(h.x + (h.w / 2), horizonY - h.h - 10);
+        ctx.lineTo(h.x + h.w + 2, horizonY - h.h);
+        ctx.fill();
+      });
+
+      const trees = [
+        { x: w * 0.05, r: 16, h: 32, type: 'round' },
+        { x: w * 0.09, r: 12, h: 28, type: 'pine' },
+        { x: w * 0.28, r: 14, h: 30, type: 'round' },
+        { x: w * 0.65, r: 12, h: 28, type: 'pine' },
+        { x: w * 0.77, r: 15, h: 35, type: 'round' },
+        { x: w * 0.92, r: 14, h: 30, type: 'pine' }
+      ];
+      trees.forEach(t => {
+        ctx.fillRect(t.x - 2, horizonY - 10, 4, 10);
+        if (t.type === 'round') {
+          ctx.beginPath();
+          ctx.arc(t.x, horizonY - t.h + t.r, t.r, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(t.x - t.r, horizonY - 8);
+          ctx.lineTo(t.x, horizonY - t.h);
+          ctx.lineTo(t.x + t.r, horizonY - 8);
+          ctx.fill();
+        }
+      });
+    }
+
+    function render() {
+      const w = canvas.width;
+      const h = canvas.height;
+      const horizonY = h * 0.78;
+
+      const pos = getCelestialPositions(currentTime);
+      const viewMode = viewSelect.value;
+
+      let skyTop, skyBottom;
+      if (pos.sunAltitude > 5) {
+        skyTop = '#0284c7';
+        skyBottom = '#bae6fd';
+      } else if (pos.sunAltitude > -8) {
+        skyTop = '#312e81';
+        skyBottom = '#f43f5e';
+      } else {
+        skyTop = getComputedStyle(document.body).getPropertyValue('--bg-top').trim();
+        skyBottom = getComputedStyle(document.body).getPropertyValue('--bg-bottom').trim();
+      }
+
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
+      skyGrad.addColorStop(0, skyTop);
+      skyGrad.addColorStop(1, skyBottom);
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, horizonY);
+
+      function azimuthToX(az) {
+        if (viewMode === 'all') {
+          return (az / 360) * w;
+        } else {
+          const centerAz = parseFloat(viewMode);
+          let diff = az - centerAz;
+          if (diff < -180) diff += 360;
+          if (diff > 180) diff -= 360;
+          return (w / 2) + (diff / 60) * (w / 2);
+        }
+      }
+
+      function altitudeToY(alt) {
+        return horizonY - (alt / 90) * (horizonY * 0.9);
+      }
+
+      if (toggleSun.checked) {
+        const sunX = azimuthToX(pos.sunAzimuth);
+        const sunY = altitudeToY(pos.sunAltitude);
+
+        if (sunY <= horizonY + 15 && sunX >= -30 && sunX <= w + 30) {
+          ctx.save();
+          ctx.shadowBlur = 25;
+          ctx.shadowColor = "#f59e0b";
+          ctx.fillStyle = "#fbbf24";
+          ctx.beginPath();
+          ctx.arc(sunX, sunY, 16, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#fef08a';
+          ctx.font = 'bold 11px system-ui';
+          ctx.textAlign = 'center';
+          ctx.fillText('SUN', sunX, sunY - 22);
+          ctx.restore();
+        }
+      }
+
+      const moonX = azimuthToX(pos.moonAzimuth);
+      const moonY = altitudeToY(pos.moonAltitude);
+
+      if (moonY <= horizonY + 15 && moonX >= -30 && moonX <= w + 30) {
+        ctx.save();
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "rgba(224, 242, 254, 0.9)";
+        
+        ctx.fillStyle = "#f1f5f9";
+        ctx.beginPath();
+        ctx.arc(moonX, moonY, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = skyTop;
+        ctx.beginPath();
+        ctx.arc(moonX + 5, moonY - 3, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('MOON', moonX, moonY - 20);
+        ctx.restore();
+      }
+
+      if (togglePlanets.checked) {
+        pos.planetList.forEach(p => {
+          const px = azimuthToX(p.azimuth);
+          const py = altitudeToY(p.altitude);
+
+          if (py <= horizonY + 10 && px >= -20 && px <= w + 20) {
+            ctx.save();
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = p.color;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(px, py, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = 'bold 9px system-ui';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.name, px, py - 10);
+            ctx.restore();
+          }
+        });
+      }
+
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--ground').trim();
+      ctx.fillRect(0, horizonY, w, h - horizonY);
+
+      drawScenery(w, horizonY);
+
+      const horizonColor = getComputedStyle(document.body).getPropertyValue('--horizon').trim();
+      ctx.strokeStyle = horizonColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, horizonY);
+      ctx.lineTo(w, horizonY);
+      ctx.stroke();
+
+      const cardinalPoints = [
+        { label: 'N', az: 0 },
+        { label: 'E', az: 90 },
+        { label: 'S', az: 180 },
+        { label: 'W', az: 270 }
+      ];
+
+      cardinalPoints.forEach(pt => {
+        const x = azimuthToX(pt.az);
+        if (x >= -20 && x <= w + 20) {
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x, horizonY - 6);
+          ctx.lineTo(x, horizonY + 6);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(x - 12, horizonY + 8, 24, 18, 4);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.font = 'bold 11px system-ui';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(pt.label, x, horizonY + 17);
+        }
+      });
+    }
+
+    let lastStamp = performance.now();
+    function loop(now) {
+      const deltaSec = (now - lastStamp) / 1000;
+      lastStamp = now;
+
+      if (isPlaying) {
+        if (isLive) {
+          currentTime = new Date();
+        } else {
+          currentTime = new Date(currentTime.getTime() + (deltaSec * 1000 * timeMultiplier));
+        }
+        syncUI();
+      }
+
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    syncUI();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
